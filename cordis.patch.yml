@@ -1,0 +1,7 @@
+﻿# The dsh-balance bundle patch: one insert row, applied as a patch layer over
+# the profile's plugin tree. Later patch layers address this row by id
+# "balance" to replace its config or disable it.
+
+- insert:
+    - id: balance
+      name: '@deepforce/dsh-balance'
