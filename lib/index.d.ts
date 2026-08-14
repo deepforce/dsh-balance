@@ -41,6 +41,8 @@ export interface Config {
     peakWindows?: number[][];
     /** DeepSeek platform top-up page the web readout links to. */
     topUpUrl?: string;
+    /** Default historical window (in days) for the daily-spend chart. */
+    usageDays?: number;
 }
 /** One resolved per-million-token price tier for the estimate model. */
 export interface TierPricing {
@@ -54,9 +56,22 @@ export interface TierPricing {
     };
 }
 export declare const Config: z<Config>;
+/** One day's aggregated provider usage and estimated spend. */
+export interface DailyUsage {
+    /** Local calendar date `YYYY-MM-DD`. */
+    date: string;
+    /** Assistant completions that reported usage. */
+    requests: number;
+    uncachedInput: number;
+    cacheRead: number;
+    cacheWrite: number;
+    output: number;
+    /** Estimated CNY spend for that day (each request priced at its own tier). */
+    cost: number;
+}
 /**
  * Register `/balance` on the composed command registry and the `/dsh-balance`
- * web route on the optional web server.
+ * and `/dsh-usage` web routes on the optional web server.
  * @param ctx - context carrying the command registry.
  * @param config - validated plugin config.
  */

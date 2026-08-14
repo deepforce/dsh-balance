@@ -18,6 +18,12 @@ export declare const zh: {
     readonly 'cost.detail.tier': "时段: {tier}";
     readonly 'tier.peak': "高峰";
     readonly 'tier.offpeak': "空闲";
+    readonly 'usage.summary': "近{days}天 ≈ {cost}";
+    readonly 'usage.title': "每日消耗";
+    readonly 'usage.loading': "加载中…";
+    readonly 'usage.empty': "近 {days} 天无消耗";
+    readonly 'usage.error': "消耗数据不可用";
+    readonly 'usage.day': "{date} · ¥{cost}";
 };
 /** English dictionary, key-identical to the Chinese source of truth. */
 export declare const en: Record<BalanceKey, string>;

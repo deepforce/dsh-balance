@@ -20,6 +20,12 @@ export const zh = {
   'cost.detail.tier': '时段: {tier}',
   'tier.peak': '高峰',
   'tier.offpeak': '空闲',
+  'usage.summary': '近{days}天 ≈ {cost}',
+  'usage.title': '每日消耗',
+  'usage.loading': '加载中…',
+  'usage.empty': '近 {days} 天无消耗',
+  'usage.error': '消耗数据不可用',
+  'usage.day': '{date} · ¥{cost}',
 } as const
 
 /** English dictionary, key-identical to the Chinese source of truth. */
@@ -39,6 +45,12 @@ export const en: Record<BalanceKey, string> = {
   'cost.detail.tier': 'tier: {tier}',
   'tier.peak': 'peak',
   'tier.offpeak': 'off-peak',
+  'usage.summary': 'Last {days}d ≈ {cost}',
+  'usage.title': 'Daily spend',
+  'usage.loading': 'Loading…',
+  'usage.empty': 'No usage in the last {days} days',
+  'usage.error': 'Usage unavailable',
+  'usage.day': '{date} · ¥{cost}',
 }
 
 /** Key domain of the `balance` namespace (zh is the source of truth). */

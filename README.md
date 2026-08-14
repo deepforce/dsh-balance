@@ -20,6 +20,10 @@ it is never written into configuration, into the returned text, or into the brow
   **Session ≈ ¥…** spend figure (hover shows the token buckets × unit prices). The readout
   copy is bilingual and follows the active dsh language (Chinese / English). The browser
   fetches the host's `/dsh-balance` route; the API key never leaves the host.
+- **Daily-spend chart** — a `近{days}天 ≈ ¥…` toggle expands an inline SVG bar chart of the
+  last `usageDays` days' estimated spend (hover a bar for its date and amount). Data comes
+  from the host's `/dsh-usage` route, which folds `assistant/message` usage across persisted
+  sessions, pricing each request at the tier in effect at its own time.
 
 ## Session-cost estimate
 
@@ -78,6 +82,7 @@ dsh web --patch "$PWD/balance.cordis.yml"
 | `peakMultiplier` | `2` | Peak-hour multiplier over the off-peak prices |
 | `peakWindows` | `[[9,12],[14,18]]` | Beijing-time peak windows as `[startHour, endHour)` pairs |
 | `topUpUrl` | `https://platform.deepseek.com/top_up` | DeepSeek platform top-up page the readout links to |
+| `usageDays` | `7` | Default historical window (in days) for the daily-spend chart |
 
 ## Usage
 

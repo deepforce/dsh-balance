@@ -1,11 +1,11 @@
 /**
- * Composer-dock entry rendering the DeepSeek account balance and the current
- * session's estimated spend under the conversation stats line. The balance and
- * price tier arrive from the host's `/dsh-balance` route; the session token
- * usage rides the standard `tokenUsage` projection (the same one the stats
- * line's cache-hit figure uses). Copy comes from the `balance` locale
- * namespace, so it follows the active dsh language. The API key never leaves
- * the host.
+ * Composer-dock entry rendering the DeepSeek account balance, the current
+ * session's estimated spend, and a click-to-expand daily-spend bar chart.
+ * Balance and price tier arrive from the host's `/dsh-balance` route; the
+ * session token usage rides the standard `tokenUsage` projection (the same one
+ * the stats line's cache-hit figure uses); the chart fetches `/dsh-usage`.
+ * Copy comes from the `balance` locale namespace, so it follows the active dsh
+ * language. The API key never leaves the host.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -36,6 +36,7 @@ interface BalanceData {
   balance_infos: BalanceInfo[]
   pricing: TierPricing
   topUpUrl: string
+  usageDays: number
 }
 
 /** Wire payload of the host's `/dsh-balance` route. */
@@ -45,11 +46,36 @@ interface BalanceResult {
   error?: string
 }
 
+/** One day's aggregated spend from the `/dsh-usage` route. */
+interface DailyUsage {
+  date: string
+  requests: number
+  uncachedInput: number
+  cacheRead: number
+  cacheWrite: number
+  output: number
+  cost: number
+}
+
+/** Wire payload of the host's `/dsh-usage` route. */
+interface UsageResult {
+  ok: boolean
+  data?: { days: DailyUsage[]; model: string }
+  error?: string
+}
+
 /** Local readout state; only the component knows it (no shared store). */
 type DockState =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
   | { kind: 'ok'; data: BalanceData }
+
+/** Chart data state; only the component knows it. */
+type UsageState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'ok'; days: DailyUsage[] }
 
 /** Map the well-known currency codes to symbols; fall back to the code itself. */
 function symbolFor(currency: string): string {
@@ -70,11 +96,18 @@ function perToken(perMillion: number): number {
 }
 
 const ROOT_STYLE: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  gap: 4,
+  fontSize: 12,
+  color: 'var(--dsw-text-secondary, #8a8f98)',
+}
+
+const ROW_STYLE: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: 6,
-  fontSize: 12,
-  color: 'var(--dsw-text-secondary, #8a8f98)',
 }
 
 const BUTTON_STYLE: CSSProperties = {
@@ -88,10 +121,23 @@ const BUTTON_STYLE: CSSProperties = {
   opacity: 0.7,
 }
 
+const USAGE_BUTTON_STYLE: CSSProperties = {
+  ...BUTTON_STYLE,
+  opacity: 1,
+  textDecoration: 'underline',
+  textUnderlineOffset: 2,
+}
+
 const LINK_STYLE: CSSProperties = {
   color: 'inherit',
   textDecoration: 'underline',
   textUnderlineOffset: 2,
+}
+
+const CHART_WRAP_STYLE: CSSProperties = {
+  padding: '4px 8px',
+  background: 'var(--dsw-surface-secondary, rgba(0,0,0,0.03))',
+  borderRadius: 6,
 }
 
 /** Props: the projection hook the runtime injects plus the locale seat. */
@@ -100,12 +146,14 @@ export interface BalanceDockProps {
   t: TranslateNS<'balance'>
 }
 
-/** The stats-line companion: balance readout, top-up link, and session spend. */
+/** The stats-line companion: balance readout, top-up link, session spend, and the daily chart. */
 export function BalanceDock({ useProjection, t }: BalanceDockProps) {
   const usage = useProjection('tokenUsage')
   const [state, setState] = useState<DockState>({ kind: 'loading' })
   const [refreshSeq, setRefreshSeq] = useState(0)
   const refresh = useCallback(() => setRefreshSeq((seq) => seq + 1), [])
+  const [usageOpen, setUsageOpen] = useState(false)
+  const [chart, setChart] = useState<UsageState>({ kind: 'idle' })
 
   useEffect(() => {
     let cancelled = false
@@ -130,6 +178,35 @@ export function BalanceDock({ useProjection, t }: BalanceDockProps) {
     return () => { cancelled = true }
   }, [refreshSeq])
 
+  const loadChart = useCallback((days: number) => {
+    setChart({ kind: 'loading' })
+    fetch(`/dsh-usage?days=${days}`, { headers: { accept: 'application/json' } })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return response.json() as Promise<UsageResult>
+      })
+      .then((result) => {
+        if (!result.ok || result.data === undefined) {
+          setChart({ kind: 'error', message: result.error ?? 'unknown error' })
+          return
+        }
+        setChart({ kind: 'ok', days: result.data.days })
+      })
+      .catch((error: unknown) => {
+        setChart({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
+      })
+  }, [])
+
+  const toggleChart = useCallback(() => {
+    setUsageOpen((open) => {
+      const next = !open
+      if (next && state.kind === 'ok' && (chart.kind === 'idle' || chart.kind === 'error')) {
+        loadChart(state.data.usageDays)
+      }
+      return next
+    })
+  }, [state, chart.kind, loadChart])
+
   // Estimated session spend: the token buckets priced at the host-selected
   // tier. Cache-write tokens are unpriced by DeepSeek's published table, so
   // they contribute nothing. The model is the host's configured estimateModel.
@@ -143,6 +220,11 @@ export function BalanceDock({ useProjection, t }: BalanceDockProps) {
     return tokens
   }, [state, usage])
 
+  const chartTotal = useMemo(
+    () => chart.kind === 'ok' ? chart.days.reduce((sum, day) => sum + day.cost, 0) : null,
+    [chart],
+  )
+
   const balanceText = state.kind === 'loading'
     ? <span>{t('balance.loading')}</span>
     : state.kind === 'error'
@@ -155,19 +237,72 @@ export function BalanceDock({ useProjection, t }: BalanceDockProps) {
 
   return (
     <div style={ROOT_STYLE}>
-      {balanceText}
-      {state.kind === 'ok' && (
-        <>
-          <a href={state.data.topUpUrl} target="_blank" rel="noreferrer" style={LINK_STYLE}>{t('balance.topUp')}</a>
-          <button type="button" onClick={refresh} title={t('balance.refresh')} aria-label={t('balance.refresh')} style={BUTTON_STYLE}>⟳</button>
-          {cost !== null && usage !== undefined && (
-            <Tooltip label={costDetail(usage, state.data.pricing, t)} side="top" delayMs={400}>
-              <span>{t('cost.label', { cost: formatCny(cost) })}</span>
-            </Tooltip>
-          )}
-        </>
+      <div style={ROW_STYLE}>
+        {balanceText}
+        {state.kind === 'ok' && (
+          <>
+            <a href={state.data.topUpUrl} target="_blank" rel="noreferrer" style={LINK_STYLE}>{t('balance.topUp')}</a>
+            <button type="button" onClick={refresh} title={t('balance.refresh')} aria-label={t('balance.refresh')} style={BUTTON_STYLE}>⟳</button>
+            {cost !== null && usage !== undefined && (
+              <Tooltip label={costDetail(usage, state.data.pricing, t)} side="top" delayMs={400}>
+                <span>{t('cost.label', { cost: formatCny(cost) })}</span>
+              </Tooltip>
+            )}
+            <button
+              type="button"
+              onClick={toggleChart}
+              title={t('usage.title')}
+              aria-expanded={usageOpen}
+              style={USAGE_BUTTON_STYLE}
+            >
+              {usageOpen ? '▾ ' : '▸ '}{t('usage.summary', {
+                days: state.data.usageDays,
+                cost: chartTotal === null ? '…' : formatCny(chartTotal),
+              })}
+            </button>
+          </>
+        )}
+      </div>
+      {usageOpen && (
+        <div style={CHART_WRAP_STYLE}>
+          {chart.kind === 'loading' && <span>{t('usage.loading')}</span>}
+          {chart.kind === 'error' && <Tooltip label={chart.message} side="top" delayMs={400}><span>{t('usage.error')}</span></Tooltip>}
+          {chart.kind === 'ok' && (chart.days.length === 0
+            ? <span>{t('usage.empty', { days: state.kind === 'ok' ? state.data.usageDays : '' })}</span>
+            : <UsageBars days={chart.days} t={t} />)}
+        </div>
       )}
     </div>
+  )
+}
+
+/** A tiny dependency-free SVG bar chart of per-day spend. */
+function UsageBars({ days, t }: { days: DailyUsage[]; t: TranslateNS<'balance'> }) {
+  const width = 300
+  const height = 60
+  const baseline = height - 8
+  const max = Math.max(...days.map((day) => day.cost), 0.01)
+  const barW = Math.max(8, Math.min(26, width / days.length - 4))
+  return (
+    <svg width={width} height={height} role="img" aria-label={t('usage.title')}>
+      {days.map((day, index) => {
+        const barH = Math.max(2, day.cost / max * (baseline - 4))
+        const x = index * (barW + 4)
+        return (
+          <rect
+            key={day.date}
+            x={x}
+            y={baseline - barH}
+            width={barW}
+            height={barH}
+            rx={2}
+            fill="var(--dsw-accent, #4c8dff)"
+          >
+            <title>{t('usage.day', { date: day.date, cost: formatCny(day.cost) })}</title>
+          </rect>
+        )
+      })}
+    </svg>
   )
 }
 

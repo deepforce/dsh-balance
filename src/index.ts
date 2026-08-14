@@ -16,6 +16,8 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 // Type-only: merges the optional ctx.webServer declaration and the service type.
 import type WebServer from '@deepseek-ai/dsh-host-webserver'
+// Type-only: merges the optional ctx.sessionPersistence declaration.
+import type {} from '@deepseek-ai/dsh-session-persistence'
 import z from '@deepseek-ai/schemastery'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -34,6 +36,7 @@ const DEFAULT_OFFPEAK_PRICES = { input: 1.5, cacheHit: 0.05, output: 4.5 } as co
 const DEFAULT_PEAK_MULTIPLIER = 2
 /** Beijing-time peak windows (peak = off-peak × multiplier). */
 const DEFAULT_PEAK_WINDOWS: readonly (readonly [number, number])[] = [[9, 12], [14, 18]]
+const DEFAULT_USAGE_DAYS = 7
 
 /**
  * Plugin config, validated by the same-named schemastery schema. Every field
@@ -57,6 +60,8 @@ export interface Config {
   peakWindows?: number[][]
   /** DeepSeek platform top-up page the web readout links to. */
   topUpUrl?: string
+  /** Default historical window (in days) for the daily-spend chart. */
+  usageDays?: number
 }
 
 /** One resolved per-million-token price tier for the estimate model. */
@@ -78,6 +83,7 @@ function resolveConfig(config: Config) {
     peakMultiplier: config.peakMultiplier ?? DEFAULT_PEAK_MULTIPLIER,
     peakWindows: normalizeWindows(config.peakWindows),
     topUpUrl: config.topUpUrl ?? DEFAULT_TOP_UP_URL,
+    usageDays: config.usageDays ?? DEFAULT_USAGE_DAYS,
   }
 }
 
@@ -109,10 +115,10 @@ function inWindows(hour: number, windows: readonly (readonly [number, number])[]
   return windows.some(([start, end]) => hour >= start && hour < end)
 }
 
-/** Select the price tier in effect at the current Beijing time. */
-function resolvePricing(config: Config): TierPricing {
+/** Select the price tier in effect at the given time (defaults to now). */
+function resolvePricing(config: Config, at: Date = new Date()): TierPricing {
   const resolved = resolveConfig(config)
-  const peak = inWindows(beijingHour(new Date()), resolved.peakWindows)
+  const peak = inWindows(beijingHour(at), resolved.peakWindows)
   const multiplier = peak ? resolved.peakMultiplier : 1
   return {
     tier: peak ? 'peak' : 'offpeak',
@@ -137,7 +143,78 @@ export const Config: z<Config> = z.object({
   peakMultiplier: z.number().min(1).default(DEFAULT_PEAK_MULTIPLIER),
   peakWindows: z.array(z.array(z.number())).default([[9, 12], [14, 18]] as unknown as number[][]),
   topUpUrl: z.string().default(DEFAULT_TOP_UP_URL),
+  usageDays: z.number().step(1).min(1).max(365).default(DEFAULT_USAGE_DAYS),
 })
+
+/** One day's aggregated provider usage and estimated spend. */
+export interface DailyUsage {
+  /** Local calendar date `YYYY-MM-DD`. */
+  date: string
+  /** Assistant completions that reported usage. */
+  requests: number
+  uncachedInput: number
+  cacheRead: number
+  cacheWrite: number
+  output: number
+  /** Estimated CNY spend for that day (each request priced at its own tier). */
+  cost: number
+}
+
+/** Local calendar date (YYYY-MM-DD) for a timestamp, in the host's timezone. */
+function localDate(ms: number): string {
+  const d = new Date(ms)
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${month}-${day}`
+}
+
+/** Parse and validate the `days` query parameter (1–365). */
+function parseDays(value: string | null, fallback: number): number {
+  if (value === null) return fallback
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 365) {
+    throw new Error(`invalid days "${value}"; expected an integer in [1, 365]`)
+  }
+  return parsed
+}
+
+/** Aggregate provider usage across sessions created within the last `days`, by local date. */
+async function queryDailyUsage(ctx: Context, config: Config, days: number): Promise<DailyUsage[]> {
+  const persistence = ctx.get('sessionPersistence')
+  if (persistence === undefined) {
+    throw new Error('session persistence is not configured; cannot read historical usage')
+  }
+  const cutoff = Date.now() - days * 86_400_000
+  const headers = await persistence.list()
+  const perDay = new Map<string, DailyUsage>()
+  for (const header of headers) {
+    if (header.createdAt < cutoff) continue
+    const { events } = await persistence.inspect(header.id)
+    for (const event of events) {
+      if (event.type !== 'assistant/message' || event.data.usage === undefined) continue
+      const usage = event.data.usage
+      const date = localDate(event.time)
+      const entry = perDay.get(date) ?? {
+        date, requests: 0, uncachedInput: 0, cacheRead: 0, cacheWrite: 0, output: 0, cost: 0,
+      }
+      // Each request is priced at the tier in effect at ITS own time, so a day
+      // that straddles a peak window still gets an accurate split.
+      const p = resolvePricing(config, new Date(event.time)).perMillion
+      entry.requests += 1
+      entry.uncachedInput += usage.inputTokens
+      entry.cacheRead += usage.cacheReadTokens ?? 0
+      entry.cacheWrite += usage.cacheWriteTokens ?? 0
+      entry.output += usage.outputTokens
+      entry.cost += (
+        usage.inputTokens * p.input
+        + (usage.cacheReadTokens ?? 0) * p.cacheHit
+        + usage.outputTokens * p.output
+      ) / 1_000_000
+      perDay.set(entry.date, entry)
+    }
+  }
+  return [...perDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
+}
 
 /** One currency row from `GET /user/balance`. */
 interface BalanceInfo {
@@ -250,6 +327,41 @@ function balanceRouteHandler(
             perMillion: pricing.perMillion,
           },
           topUpUrl: resolved.topUpUrl,
+          usageDays: resolved.usageDays,
+        },
+      }))
+    } catch (error: unknown) {
+      res.end(JSON.stringify({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }))
+    }
+  }
+}
+
+/**
+ * One `/dsh-usage` request handler: aggregate provider usage over the last
+ * `days` (query param or config default) and answer JSON.
+ * @param ctx - plugin context (session persistence seam).
+ * @param config - resolved plugin config.
+ * @returns the route handler.
+ */
+function usageRouteHandler(
+  ctx: Context,
+  config: Config,
+): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+  const resolved = resolveConfig(config)
+  return async (req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    try {
+      const url = new URL(req.url ?? '/', 'http://x')
+      const days = parseDays(url.searchParams.get('days'), resolved.usageDays)
+      const daysReport = await queryDailyUsage(ctx, config, days)
+      res.end(JSON.stringify({
+        ok: true,
+        data: {
+          days: daysReport,
+          model: resolved.estimateModel,
         },
       }))
     } catch (error: unknown) {
@@ -263,22 +375,32 @@ function balanceRouteHandler(
 
 /**
  * Register `/balance` on the composed command registry and the `/dsh-balance`
- * web route on the optional web server.
+ * and `/dsh-usage` web routes on the optional web server.
  * @param ctx - context carrying the command registry.
  * @param config - validated plugin config.
  */
 export function apply(ctx: Context, config: Config): void {
-  // Browser-facing balance readout: the web GUI's composer dock fetches this
-  // route on mount and on manual refresh. The webServer service may be
-  // provided AFTER this plugin activates (bundle row order does not decide
-  // activation order), so register on first sight: directly when already
-  // present, otherwise through the internal/service binding event.
+  // Browser-facing readouts: the web GUI's composer dock fetches these routes
+  // on mount and on manual refresh. The webServer service may be provided
+  // AFTER this plugin activates (bundle row order does not decide activation
+  // order), so register on first sight: directly when already present,
+  // otherwise through the internal/service binding event.
   ctx.effect(() => {
-    const register = (server: WebServer): (() => void) => server.register({
-      kind: 'exact',
-      path: '/dsh-balance',
-      handler: balanceRouteHandler(ctx, config),
-    })
+    const register = (server: WebServer): (() => void) => {
+      const disposers = [
+        server.register({
+          kind: 'exact',
+          path: '/dsh-balance',
+          handler: balanceRouteHandler(ctx, config),
+        }),
+        server.register({
+          kind: 'exact',
+          path: '/dsh-usage',
+          handler: usageRouteHandler(ctx, config),
+        }),
+      ]
+      return () => { for (const disposer of disposers) disposer() }
+    }
     const present = ctx.get('webServer')
     if (present !== undefined) return register(present)
     const disposers: (() => void)[] = []
