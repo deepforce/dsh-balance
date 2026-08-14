@@ -14,8 +14,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
-// Type-only: merges the optional ctx.webServer declaration.
-import type {} from '@deepseek-ai/dsh-host-webserver'
+// Type-only: merges the optional ctx.webServer declaration and the service type.
+import type WebServer from '@deepseek-ai/dsh-host-webserver'
 import z from '@deepseek-ai/schemastery'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -127,39 +127,69 @@ function render(balance: BalanceResponse): CommandResult {
 }
 
 /**
- * Register `/balance` on the composed command registry.
+ * One `/dsh-balance` request handler: resolve the key on the host, fetch the
+ * balance, and answer JSON. The browser only ever receives the public figures.
+ * @param ctx - plugin context (credential seam + environment fallback).
+ * @param config - resolved plugin config.
+ * @returns the route handler.
+ */
+function balanceRouteHandler(
+  ctx: Context,
+  config: Config,
+): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+  return async (_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    try {
+      const apiKey = await resolveApiKey(ctx, config.apiKeyEnv ?? DEFAULT_API_KEY_ENV)
+      const balance = await fetchBalance(
+        config.baseURL ?? DEFAULT_BASE_URL,
+        apiKey,
+        config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        new AbortController().signal,
+      )
+      res.end(JSON.stringify({ ok: true, data: balance }))
+    } catch (error: unknown) {
+      res.end(JSON.stringify({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }))
+    }
+  }
+}
+
+/**
+ * Register `/balance` on the composed command registry and the `/dsh-balance`
+ * web route on the optional web server.
  * @param ctx - context carrying the command registry.
  * @param config - validated plugin config.
  */
 export function apply(ctx: Context, config: Config): void {
   // Browser-facing balance readout: the web GUI's composer dock fetches this
-  // route on mount and on manual refresh. The API key stays on the host; the
-  // browser only ever receives the public balance figures.
-  const webServer = ctx.get('webServer')
-  if (webServer !== undefined) {
-    ctx.effect(() => webServer.register({
+  // route on mount and on manual refresh. The webServer service may be
+  // provided AFTER this plugin activates (bundle row order does not decide
+  // activation order), so register on first sight: directly when already
+  // present, otherwise through the internal/service binding event.
+  ctx.effect(() => {
+    const register = (server: WebServer): (() => void) => server.register({
       kind: 'exact',
       path: '/dsh-balance',
-      handler: async (_req: IncomingMessage, res: ServerResponse) => {
-        res.writeHead(200, { 'content-type': 'application/json' })
-        try {
-          const apiKey = await resolveApiKey(ctx, config.apiKeyEnv ?? DEFAULT_API_KEY_ENV)
-          const balance = await fetchBalance(
-            config.baseURL ?? DEFAULT_BASE_URL,
-            apiKey,
-            config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-            new AbortController().signal,
-          )
-          res.end(JSON.stringify({ ok: true, data: balance }))
-        } catch (error: unknown) {
-          res.end(JSON.stringify({
-            ok: false,
-            error: error instanceof Error ? error.message : String(error),
-          }))
-        }
-      },
-    }), 'dsh-balance: web route')
-  }
+      handler: balanceRouteHandler(ctx, config),
+    })
+    const present = ctx.get('webServer')
+    if (present !== undefined) return register(present)
+    const disposers: (() => void)[] = []
+    let registered = false
+    const off = ctx.on('internal/service', (name, value) => {
+      // Notify fires on every service (re)binding; register exactly once.
+      if (name !== 'webServer' || registered) return
+      registered = true
+      disposers.push(register(value as WebServer))
+    })
+    return () => {
+      off()
+      for (const disposer of disposers) disposer()
+    }
+  }, 'dsh-balance: web route')
 
   ctx.effect(function* () {
     yield ctx.commands.register({

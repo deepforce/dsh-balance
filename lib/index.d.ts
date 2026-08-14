@@ -30,7 +30,8 @@ export interface Config {
 }
 export declare const Config: z<Config>;
 /**
- * Register `/balance` on the composed command registry.
+ * Register `/balance` on the composed command registry and the `/dsh-balance`
+ * web route on the optional web server.
  * @param ctx - context carrying the command registry.
  * @param config - validated plugin config.
  */
