@@ -27,6 +27,13 @@ export const inject = ['commands']
 const DEFAULT_API_KEY_ENV = 'DEEPSEEK_API_KEY'
 const DEFAULT_BASE_URL = 'https://api.deepseek.com'
 const DEFAULT_TIMEOUT_MS = 10_000
+const DEFAULT_ESTIMATE_MODEL = 'deepseek-v4-flash'
+const DEFAULT_TOP_UP_URL = 'https://platform.deepseek.com/top_up'
+/** DeepSeek official off-peak per-million-token CNY prices (from 2026-08-17). */
+const DEFAULT_OFFPEAK_PRICES = { input: 1.5, cacheHit: 0.05, output: 4.5 } as const
+const DEFAULT_PEAK_MULTIPLIER = 2
+/** Beijing-time peak windows (peak = off-peak × multiplier). */
+const DEFAULT_PEAK_WINDOWS: readonly (readonly [number, number])[] = [[9, 12], [14, 18]]
 
 /**
  * Plugin config, validated by the same-named schemastery schema. Every field
@@ -40,12 +47,96 @@ export interface Config {
   baseURL?: string
   /** Per-request timeout in milliseconds. */
   timeoutMs?: number
+  /** Default model used for the session-cost estimate. */
+  estimateModel?: string
+  /** Off-peak per-million-token CNY prices: uncached input, cache hit, output. */
+  offpeakPrices?: { input: number; cacheHit: number; output: number }
+  /** Peak-hour multiplier over the off-peak prices (DeepSeek peak = 2×). */
+  peakMultiplier?: number
+  /** Beijing-time peak windows as [startHour, endHour) pairs. */
+  peakWindows?: number[][]
+  /** DeepSeek platform top-up page the web readout links to. */
+  topUpUrl?: string
+}
+
+/** One resolved per-million-token price tier for the estimate model. */
+export interface TierPricing {
+  /** Peak or off-peak tier selected by the current Beijing time. */
+  tier: 'peak' | 'offpeak'
+  /** Per-million-token CNY prices in effect for that tier. */
+  perMillion: { input: number; cacheHit: number; output: number }
+}
+
+/** Resolve optional config fields to their effective values. */
+function resolveConfig(config: Config) {
+  return {
+    apiKeyEnv: config.apiKeyEnv ?? DEFAULT_API_KEY_ENV,
+    baseURL: config.baseURL ?? DEFAULT_BASE_URL,
+    timeoutMs: config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    estimateModel: config.estimateModel ?? DEFAULT_ESTIMATE_MODEL,
+    offpeakPrices: config.offpeakPrices ?? { ...DEFAULT_OFFPEAK_PRICES },
+    peakMultiplier: config.peakMultiplier ?? DEFAULT_PEAK_MULTIPLIER,
+    peakWindows: normalizeWindows(config.peakWindows),
+    topUpUrl: config.topUpUrl ?? DEFAULT_TOP_UP_URL,
+  }
+}
+
+/** Validate and normalize configured peak windows to [startHour, endHour) pairs. */
+function normalizeWindows(
+  windows: number[][] | undefined,
+): readonly (readonly [number, number])[] {
+  if (windows === undefined) return DEFAULT_PEAK_WINDOWS
+  for (const window of windows) {
+    const [start, end] = window
+    if (window.length !== 2 || !Number.isInteger(start) || !Number.isInteger(end)
+      || start < 0 || start >= 24 || end < 0 || end >= 24 || start >= end) {
+      throw new Error(
+        `dsh-balance: invalid peakWindows entry [${window.join(', ')}]; `
+        + 'expected [startHour, endHour) with integers in [0, 24) and start < end',
+      )
+    }
+  }
+  return windows as unknown as readonly (readonly [number, number])[]
+}
+
+/** Current hour in Beijing time (UTC+8; China observes no DST). */
+function beijingHour(date: Date): number {
+  return (date.getUTCHours() + 8) % 24
+}
+
+/** Whether `hour` falls inside any [start, end) window. */
+function inWindows(hour: number, windows: readonly (readonly [number, number])[]): boolean {
+  return windows.some(([start, end]) => hour >= start && hour < end)
+}
+
+/** Select the price tier in effect at the current Beijing time. */
+function resolvePricing(config: Config): TierPricing {
+  const resolved = resolveConfig(config)
+  const peak = inWindows(beijingHour(new Date()), resolved.peakWindows)
+  const multiplier = peak ? resolved.peakMultiplier : 1
+  return {
+    tier: peak ? 'peak' : 'offpeak',
+    perMillion: {
+      input: resolved.offpeakPrices.input * multiplier,
+      cacheHit: resolved.offpeakPrices.cacheHit * multiplier,
+      output: resolved.offpeakPrices.output * multiplier,
+    },
+  }
 }
 
 export const Config: z<Config> = z.object({
   apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV),
   baseURL: z.string().default(DEFAULT_BASE_URL),
   timeoutMs: z.number().step(1).min(1).default(DEFAULT_TIMEOUT_MS),
+  estimateModel: z.string().default(DEFAULT_ESTIMATE_MODEL),
+  offpeakPrices: z.object({
+    input: z.number().min(0).default(DEFAULT_OFFPEAK_PRICES.input),
+    cacheHit: z.number().min(0).default(DEFAULT_OFFPEAK_PRICES.cacheHit),
+    output: z.number().min(0).default(DEFAULT_OFFPEAK_PRICES.output),
+  }).default({ ...DEFAULT_OFFPEAK_PRICES }),
+  peakMultiplier: z.number().min(1).default(DEFAULT_PEAK_MULTIPLIER),
+  peakWindows: z.array(z.array(z.number())).default([[9, 12], [14, 18]] as unknown as number[][]),
+  topUpUrl: z.string().default(DEFAULT_TOP_UP_URL),
 })
 
 /** One currency row from `GET /user/balance`. */
@@ -137,17 +228,30 @@ function balanceRouteHandler(
   ctx: Context,
   config: Config,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+  const resolved = resolveConfig(config)
   return async (_req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' })
     try {
-      const apiKey = await resolveApiKey(ctx, config.apiKeyEnv ?? DEFAULT_API_KEY_ENV)
+      const apiKey = await resolveApiKey(ctx, resolved.apiKeyEnv)
       const balance = await fetchBalance(
-        config.baseURL ?? DEFAULT_BASE_URL,
+        resolved.baseURL,
         apiKey,
-        config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        resolved.timeoutMs,
         new AbortController().signal,
       )
-      res.end(JSON.stringify({ ok: true, data: balance }))
+      const pricing = resolvePricing(config)
+      res.end(JSON.stringify({
+        ok: true,
+        data: {
+          ...balance,
+          pricing: {
+            model: resolved.estimateModel,
+            tier: pricing.tier,
+            perMillion: pricing.perMillion,
+          },
+          topUpUrl: resolved.topUpUrl,
+        },
+      }))
     } catch (error: unknown) {
       res.end(JSON.stringify({
         ok: false,

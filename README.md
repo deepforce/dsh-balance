@@ -13,8 +13,19 @@ it is never written into configuration, into the returned text, or into the brow
 
 - `/balance` — human slash command that prints the full balance breakdown in the session.
 - **Web GUI readout** — the conversation stats area (below the cache-hit figure) shows a
-  compact `余额: ¥…` line with hover details (topped-up / granted) and a manual refresh
-  button. The browser fetches the host's `/dsh-balance` route; the API key never leaves the host.
+  compact `余额: ¥…` line with hover details (topped-up / granted), a **充值** link to the
+  DeepSeek platform top-up page, a manual refresh button, and an estimated **本会话 ≈ ¥…**
+  spend figure (hover shows the token buckets × unit prices). The browser fetches the host's
+  `/dsh-balance` route; the API key never leaves the host.
+
+## Session-cost estimate
+
+The `本会话 ≈ ¥…` figure prices the session's cumulative token usage — the same
+`tokenUsage` projection the cache-hit stat reads — at DeepSeek's published per-million-token
+rates (peak/off-peak, selected by the current Beijing time). It is an **estimate, not a
+billing record**: the model used is the configured `estimateModel` (not per-request model
+selection), and cache-write tokens are unpriced. Prices can be adjusted through the
+`offpeakPrices` / `peakMultiplier` / `peakWindows` config fields.
 
 ## Compatibility
 
@@ -59,6 +70,11 @@ dsh web --patch "$PWD/balance.cordis.yml"
 | `apiKeyEnv` | `DEEPSEEK_API_KEY` | Credential reference (environment-variable name), resolved per call |
 | `baseURL` | `https://api.deepseek.com` | API endpoint base |
 | `timeoutMs` | `10000` | Per-request timeout in milliseconds |
+| `estimateModel` | `deepseek-v4-flash` | Model whose prices the session-cost estimate uses |
+| `offpeakPrices` | `{input: 1.5, cacheHit: 0.05, output: 4.5}` | Off-peak CNY per-million-token prices (uncached input / cache hit / output) |
+| `peakMultiplier` | `2` | Peak-hour multiplier over the off-peak prices |
+| `peakWindows` | `[[9,12],[14,18]]` | Beijing-time peak windows as `[startHour, endHour)` pairs |
+| `topUpUrl` | `https://platform.deepseek.com/top_up` | DeepSeek platform top-up page the readout links to |
 
 ## Usage
 

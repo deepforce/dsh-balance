@@ -27,6 +27,31 @@ export interface Config {
     baseURL?: string;
     /** Per-request timeout in milliseconds. */
     timeoutMs?: number;
+    /** Default model used for the session-cost estimate. */
+    estimateModel?: string;
+    /** Off-peak per-million-token CNY prices: uncached input, cache hit, output. */
+    offpeakPrices?: {
+        input: number;
+        cacheHit: number;
+        output: number;
+    };
+    /** Peak-hour multiplier over the off-peak prices (DeepSeek peak = 2×). */
+    peakMultiplier?: number;
+    /** Beijing-time peak windows as [startHour, endHour) pairs. */
+    peakWindows?: number[][];
+    /** DeepSeek platform top-up page the web readout links to. */
+    topUpUrl?: string;
+}
+/** One resolved per-million-token price tier for the estimate model. */
+export interface TierPricing {
+    /** Peak or off-peak tier selected by the current Beijing time. */
+    tier: 'peak' | 'offpeak';
+    /** Per-million-token CNY prices in effect for that tier. */
+    perMillion: {
+        input: number;
+        cacheHit: number;
+        output: number;
+    };
 }
 export declare const Config: z<Config>;
 /**
