@@ -1,5 +1,7 @@
 # dsh-balance
 
+English | [中文](README.zh.md)
+
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin that adds a
 `/balance` slash command and a composer-dock balance readout to the web GUI, querying the
 DeepSeek account balance live.
