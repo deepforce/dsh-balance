@@ -3,7 +3,9 @@
  * session's estimated spend under the conversation stats line. The balance and
  * price tier arrive from the host's `/dsh-balance` route; the session token
  * usage rides the standard `tokenUsage` projection (the same one the stats
- * line's cache-hit figure uses). The API key never leaves the host.
+ * line's cache-hit figure uses). Copy comes from the `balance` locale
+ * namespace, so it follows the active dsh language. The API key never leaves
+ * the host.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -11,6 +13,8 @@ import type { CSSProperties } from 'react'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { UseProjection } from '@deepseek-ai/dsh-client-runtime/client'
 import type { TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
+import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
+import type { BalanceKey } from './locales.ts'
 
 /** One currency row from `GET /user/balance`. */
 interface BalanceInfo {
@@ -90,13 +94,14 @@ const LINK_STYLE: CSSProperties = {
   textUnderlineOffset: 2,
 }
 
-/** Props: the standard projection hook the runtime injects for session scope. */
+/** Props: the projection hook the runtime injects plus the locale seat. */
 export interface BalanceDockProps {
   useProjection: UseProjection
+  t: TranslateNS<'balance'>
 }
 
 /** The stats-line companion: balance readout, top-up link, and session spend. */
-export function BalanceDock({ useProjection }: BalanceDockProps) {
+export function BalanceDock({ useProjection, t }: BalanceDockProps) {
   const usage = useProjection('tokenUsage')
   const [state, setState] = useState<DockState>({ kind: 'loading' })
   const [refreshSeq, setRefreshSeq] = useState(0)
@@ -139,12 +144,12 @@ export function BalanceDock({ useProjection }: BalanceDockProps) {
   }, [state, usage])
 
   const balanceText = state.kind === 'loading'
-    ? <span>余额: …</span>
+    ? <span>{t('balance.loading')}</span>
     : state.kind === 'error'
-      ? <Tooltip label={state.message} side="top" delayMs={400}><span>余额: 不可用</span></Tooltip>
+      ? <Tooltip label={state.message} side="top" delayMs={400}><span>{t('balance.unavailable')}</span></Tooltip>
       : (
-        <Tooltip label={balanceDetail(state.data)} side="top" delayMs={400}>
-          <span>余额: {balanceTotal(state.data)}</span>
+        <Tooltip label={balanceDetail(state.data, t)} side="top" delayMs={400}>
+          <span>{t('balance.label', { total: balanceTotal(state.data, t) })}</span>
         </Tooltip>
       )
 
@@ -153,11 +158,11 @@ export function BalanceDock({ useProjection }: BalanceDockProps) {
       {balanceText}
       {state.kind === 'ok' && (
         <>
-          <a href={state.data.topUpUrl} target="_blank" rel="noreferrer" style={LINK_STYLE}>充值</a>
-          <button type="button" onClick={refresh} title="刷新余额" aria-label="刷新余额" style={BUTTON_STYLE}>⟳</button>
+          <a href={state.data.topUpUrl} target="_blank" rel="noreferrer" style={LINK_STYLE}>{t('balance.topUp')}</a>
+          <button type="button" onClick={refresh} title={t('balance.refresh')} aria-label={t('balance.refresh')} style={BUTTON_STYLE}>⟳</button>
           {cost !== null && usage !== undefined && (
-            <Tooltip label={costDetail(usage, state.data.pricing)} side="top" delayMs={400}>
-              <span>本会话 ≈ {formatCny(cost)}</span>
+            <Tooltip label={costDetail(usage, state.data.pricing, t)} side="top" delayMs={400}>
+              <span>{t('cost.label', { cost: formatCny(cost) })}</span>
             </Tooltip>
           )}
         </>
@@ -167,27 +172,37 @@ export function BalanceDock({ useProjection }: BalanceDockProps) {
 }
 
 /** Render the first balance row compactly, or an unavailable marker. */
-function balanceTotal(data: BalanceData): string {
+function balanceTotal(data: BalanceData, t: TranslateNS<'balance'>): string {
   const info = data.balance_infos?.[0]
-  if (!data.is_available || info === undefined) return '—'
+  if (!data.is_available || info === undefined) return t('balance.none')
   return `${symbolFor(info.currency)}${info.total_balance}`
 }
 
 /** Hover detail: topped-up and granted for every reported currency. */
-function balanceDetail(data: BalanceData): string {
+function balanceDetail(data: BalanceData, t: TranslateNS<'balance'>): string {
   const rows = (data.balance_infos ?? []).map((info) =>
-    `${symbolFor(info.currency)}${info.total_balance} · 充值 ${symbolFor(info.currency)}${info.topped_up_balance} · 赠送 ${symbolFor(info.currency)}${info.granted_balance}`,
+    t('balance.detail', {
+      symbol: symbolFor(info.currency),
+      total: info.total_balance,
+      toppedUp: info.topped_up_balance,
+      granted: info.granted_balance,
+    }),
   )
-  return rows.length > 0 ? rows.join(' / ') : 'DeepSeek balance unavailable'
+  return rows.length > 0 ? rows.join(' / ') : t('balance.detail.unavailable')
 }
 
 /** Hover detail for the spend figure: token buckets times the active tier. */
-function costDetail(usage: TokenUsageProjection, pricing: TierPricing): string {
+function costDetail(
+  usage: TokenUsageProjection,
+  pricing: TierPricing,
+  t: TranslateNS<'balance'>,
+): string {
   const p = pricing.perMillion
+  const tierKey: BalanceKey = pricing.tier === 'peak' ? 'tier.peak' : 'tier.offpeak'
   return [
-    `输入 ${usage.uncachedInputTokens} × ¥${p.input}/M`,
-    `缓存命中 ${usage.cacheReadTokens} × ¥${p.cacheHit}/M`,
-    `输出 ${usage.outputTokens} × ¥${p.output}/M`,
-    `时段: ${pricing.tier === 'peak' ? '高峰' : '空闲'}`,
+    t('cost.detail.input', { tokens: String(usage.uncachedInputTokens), price: p.input }),
+    t('cost.detail.cacheHit', { tokens: String(usage.cacheReadTokens), price: p.cacheHit }),
+    t('cost.detail.output', { tokens: String(usage.outputTokens), price: p.output }),
+    t('cost.detail.tier', { tier: t(tierKey) }),
   ].join(' · ')
 }

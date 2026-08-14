@@ -17,8 +17,9 @@ it is never written into configuration, into the returned text, or into the brow
 - **Web GUI readout** — the conversation stats area (below the cache-hit figure) shows a
   compact `余额: ¥…` line with hover details (topped-up / granted), a **充值** link to the
   DeepSeek platform top-up page, a manual refresh button, and an estimated **本会话 ≈ ¥…**
-  spend figure (hover shows the token buckets × unit prices). The browser fetches the host's
-  `/dsh-balance` route; the API key never leaves the host.
+  spend figure (hover shows the token buckets × unit prices). The readout copy is
+  bilingual and follows the active dsh language (中文 / English). The browser fetches the
+  host's `/dsh-balance` route; the API key never leaves the host.
 
 ## Session-cost estimate
 
