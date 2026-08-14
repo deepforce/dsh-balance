@@ -1,6 +1,6 @@
 {
   "name": "@deepforce/dsh-balance",
-  "description": "Human-facing /balance slash command that queries the DeepSeek account balance",
+  "description": "DeepSeek account balance: /balance command plus a composer-dock readout in the web GUI",
   "version": "0.1.0",
   "publishConfig": {
     "access": "public"
@@ -12,6 +12,10 @@
     ".": {
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/client/index.d.ts",
+      "default": "./lib/client.js"
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
@@ -26,24 +30,48 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
     }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsdown",
+    "bundle": "tsdown",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-commands": "^0.0.1-rc.1",
     "@deepseek-ai/dsh-credentials": "^0.0.1-rc.1",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/dsh-host-webserver": "^0.0.1-rc.1",
+    "@deepseek-ai/dsh-client-runtime": "^0.0.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-conversation": "^0.0.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.0.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.0.1-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "react": "^18.2.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-commands": "^0.0.1-rc.1",
     "@deepseek-ai/dsh-credentials": "^0.0.1-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "^0.0.1-rc.1",
+    "@deepseek-ai/dsh-client-runtime": "^0.0.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-conversation": "^0.0.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.0.1-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.0.1-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@types/node": "^26.2.0",
-    "typescript": "^5.5.0"
-  },
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.7.0"
   }
 }

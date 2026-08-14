@@ -10,9 +10,12 @@
  * @module @deepforce/dsh-balance
  */
 
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+// Type-only: merges the optional ctx.webServer declaration.
+import type {} from '@deepseek-ai/dsh-host-webserver'
 import z from '@deepseek-ai/schemastery'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -129,6 +132,35 @@ function render(balance: BalanceResponse): CommandResult {
  * @param config - validated plugin config.
  */
 export function apply(ctx: Context, config: Config): void {
+  // Browser-facing balance readout: the web GUI's composer dock fetches this
+  // route on mount and on manual refresh. The API key stays on the host; the
+  // browser only ever receives the public balance figures.
+  const webServer = ctx.get('webServer')
+  if (webServer !== undefined) {
+    ctx.effect(() => webServer.register({
+      kind: 'exact',
+      path: '/dsh-balance',
+      handler: async (_req: IncomingMessage, res: ServerResponse) => {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        try {
+          const apiKey = await resolveApiKey(ctx, config.apiKeyEnv ?? DEFAULT_API_KEY_ENV)
+          const balance = await fetchBalance(
+            config.baseURL ?? DEFAULT_BASE_URL,
+            apiKey,
+            config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+            new AbortController().signal,
+          )
+          res.end(JSON.stringify({ ok: true, data: balance }))
+        } catch (error: unknown) {
+          res.end(JSON.stringify({
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          }))
+        }
+      },
+    }), 'dsh-balance: web route')
+  }
+
   ctx.effect(function* () {
     yield ctx.commands.register({
       name: 'balance',

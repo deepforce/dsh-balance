@@ -1,0 +1,15 @@
+# pnpm 11 settings for this standalone plugin repo. The upstream
+# @deepseek-ai npm release (0.0.1-rc.1) declares several dependencies that do
+# not exist on npm (upstream publishing defects; the real dsh runtime resolves
+# them through its own workspace). Alias each to the closest real package so
+# this repo can install, typecheck, and bundle.
+overrides:
+  '@deepseek-ai/dsh-compact': 'npm:@deepseek-ai/dsh-compaction@^0.0.1-rc.5'
+  '@deepseek-ai/dsh-user-interaction': 'npm:@deepseek-ai/dsh-user-questions@^0.0.1-rc.3'
+  '@deepseek-ai/dsh-type-meta': 'npm:@deepseek-ai/dsh-typert-registry@^0.0.1-rc.1'
+  '@deepseek-ai/dsh-tasks': 'npm:@deepseek-ai/dsh-jobs@^0.0.1-rc.3'
+  '@deepseek-ai/dsh-paths': 'npm:@deepseek-ai/dsh-home-paths@^0.0.1-rc.3'
+
+# The upstream npm release is missing a few more packages; the installed tree
+# is complete enough to build, so skip pnpm's pre-run dependency check.
+verifyDepsBeforeRun: false

@@ -1,12 +1,20 @@
-﻿# dsh-balance
+# dsh-balance
 
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin that adds a
-`/balance` slash command to a session, querying the DeepSeek account balance live.
+`/balance` slash command and a composer-dock balance readout to the web GUI, querying the
+DeepSeek account balance live.
 
 It calls DeepSeek's official [Get User Balance](https://api-docs.deepseek.com/api/get-user-balance/)
 endpoint and returns the total, topped-up, and granted balance per currency. The API key is
 resolved through the credential seam (`ctx.credentials`) or the environment on every call —
-it is never written into configuration or into the text returned to the UI.
+it is never written into configuration, into the returned text, or into the browser.
+
+## Features
+
+- `/balance` — human slash command that prints the full balance breakdown in the session.
+- **Web GUI readout** — the conversation stats area (below the cache-hit figure) shows a
+  compact `余额: ¥…` line with hover details (topped-up / granted) and a manual refresh
+  button. The browser fetches the host's `/dsh-balance` route; the API key never leaves the host.
 
 ## Install
 
@@ -18,7 +26,10 @@ After pushing to GitHub:
 dsh plugin --profile web add github:deepforce/dsh-balance
 ```
 
-Replace `github:deepforce/dsh-balance` with your actual git URL.
+Replace `github:deepforce/dsh-balance` with your actual git URL. The bundle installs both
+halves: the host plugin (slash command + `/dsh-balance` route) and, because the package
+declares `dsh.client`, the browser-side composer-dock plugin. Restart `dsh web` after
+installing so the client plugin table picks the new entry up.
 
 ### Option B: `--patch` overlay
 
@@ -33,15 +44,6 @@ Replace `github:deepforce/dsh-balance` with your actual git URL.
 dsh web --patch "$PWD/balance.cordis.yml"
 ```
 
-### Local development
-
-```sh
-git clone https://github.com/deepforce/dsh-balance
-cd dsh-balance
-npm install
-npm run build
-```
-
 ## Configuration
 
 | Field | Default | Meaning |
@@ -52,33 +54,37 @@ npm run build
 
 ## Usage
 
-Type in the session composer:
+- Type `/balance` in the session composer:
 
-```
-/balance
-```
+  ```
+  Balance (CNY): 110.00
+    Topped up: 100.00
+    Granted:   10.00
+  ```
 
-Output looks like:
-
-```
-Balance (CNY): 110.00
-  Topped up: 100.00
-  Granted:   10.00
-```
+- In the web GUI, the stats area under the composer shows `余额: ¥110.00 ⟳`; hover reveals
+  the topped-up / granted split, and the ⟳ button refreshes.
 
 ## Security
 
 - `apiKeyEnv` is a credential reference: resolved through the dsh credential service first,
   then the environment. The key is never hard-coded or printed.
+- The browser readout only ever sees the public balance figures via the host's
+  `/dsh-balance` route; the key stays on the host.
 - Only `GET https://api.deepseek.com/user/balance` is called; no other data leaves the process.
-- This is a human-only command (`recordInput: false`): it never enters model context.
 
-## Build
+## Building locally
 
 ```sh
-npm run build       # tsc emits to lib/
-npm run typecheck
+pnpm install        # uses pnpm-workspace.yaml overrides for upstream npm gaps
+pnpm run build      # tsc (node half + types) then tsdown (lib/client.js browser bundle)
+pnpm run typecheck
 ```
+
+The upstream `@deepseek-ai` npm release (0.0.1-rc.1) declares a few dependencies that do not
+exist on npm; `pnpm-workspace.yaml` aliases them to the real packages so this repo can
+install and build. The dsh runtime resolves those dependencies from its own tree, so the
+overrides do not affect the installed plugin.
 
 ## License
 
