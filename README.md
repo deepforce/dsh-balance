@@ -15,15 +15,15 @@ it is never written into configuration, into the returned text, or into the brow
 
 - `/balance` — human slash command that prints the full balance breakdown in the session.
 - **Web GUI readout** — the conversation stats area (below the cache-hit figure) shows a
-  compact `余额: ¥…` line with hover details (topped-up / granted), a **充值** link to the
-  DeepSeek platform top-up page, a manual refresh button, and an estimated **本会话 ≈ ¥…**
-  spend figure (hover shows the token buckets × unit prices). The readout copy is
-  bilingual and follows the active dsh language (中文 / English). The browser fetches the
-  host's `/dsh-balance` route; the API key never leaves the host.
+  compact `Balance: ¥…` line with hover details (topped-up / granted), a **Top up** link to
+  the DeepSeek platform top-up page, a manual refresh button, and an estimated
+  **Session ≈ ¥…** spend figure (hover shows the token buckets × unit prices). The readout
+  copy is bilingual and follows the active dsh language (Chinese / English). The browser
+  fetches the host's `/dsh-balance` route; the API key never leaves the host.
 
 ## Session-cost estimate
 
-The `本会话 ≈ ¥…` figure prices the session's cumulative token usage — the same
+The `Session ≈ ¥…` figure prices the session's cumulative token usage — the same
 `tokenUsage` projection the cache-hit stat reads — at DeepSeek's published per-million-token
 rates (peak/off-peak, selected by the current Beijing time). It is an **estimate, not a
 billing record**: the model used is the configured `estimateModel` (not per-request model
@@ -89,8 +89,8 @@ dsh web --patch "$PWD/balance.cordis.yml"
     Granted:   10.00
   ```
 
-- In the web GUI, the stats area under the composer shows `余额: ¥110.00 ⟳`; hover reveals
-  the topped-up / granted split, and the ⟳ button refreshes.
+- In the web GUI, the stats area under the composer shows `Balance: ¥110.00 ⟳`; hover
+  reveals the topped-up / granted split, and the ⟳ button refreshes.
 
 ## Security
 
