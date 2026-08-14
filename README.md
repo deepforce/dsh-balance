@@ -16,6 +16,14 @@ it is never written into configuration, into the returned text, or into the brow
   compact `余额: ¥…` line with hover details (topped-up / granted) and a manual refresh
   button. The browser fetches the host's `/dsh-balance` route; the API key never leaves the host.
 
+## Compatibility
+
+Tested against DeepSeek Harness `0.1.0-rc.6` (web profile, Windows 11) — the `/balance`
+command and the composer-dock readout were both verified live on 2026-08-14. The npm
+`@deepseek-ai/dsh-*` packages are pre-release (no compatibility promise); if a newer dsh
+version changes the `conversation.composer.dock` slot or the `webServer` service, re-run
+the check below and file an issue.
+
 ## Install
 
 ### Option A: `dsh plugin` (recommended)
