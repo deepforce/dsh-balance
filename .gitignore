@@ -1,3 +1,4 @@
-﻿node_modules/
-lib/
+node_modules/
 *.tsbuildinfo
+# lib/ is committed on purpose: pnpm installs this package from git and the
+# compiled entry (main: lib/index.js) must be present without running prepare.
