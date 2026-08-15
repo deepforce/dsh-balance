@@ -149,10 +149,13 @@ const LINK_STYLE: CSSProperties = {
   textUnderlineOffset: 2,
 }
 
+/** Opaque bubble surface: hides the chat content underneath. */
 const CHART_WRAP_STYLE: CSSProperties = {
   padding: '4px 8px',
-  background: 'var(--dsw-surface-secondary, rgba(0,0,0,0.03))',
+  background: 'var(--dsw-surface, #1f2430)',
+  border: '1px solid rgba(128,128,128,0.35)',
   borderRadius: 6,
+  boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
 }
 
 /** The chart floats UP from the summary like a comic speech bubble. */
@@ -164,15 +167,16 @@ const CHART_POPOVER_STYLE: CSSProperties = {
   zIndex: 30,
 }
 
-/** The tail triangle pointing back at the summary. */
+/** The tail triangle pointing back at the summary, same opaque surface. */
 const TAIL_STYLE: CSSProperties = {
   position: 'absolute',
-  bottom: -6,
+  bottom: -7,
   width: 0,
   height: 0,
   borderLeft: '6px solid transparent',
   borderRight: '6px solid transparent',
-  borderTop: '7px solid var(--dsw-surface-secondary, rgba(0,0,0,0.03))',
+  borderTop: '8px solid var(--dsw-surface, #1f2430)',
+  filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.25))',
 }
 
 /** Props: the projection hook the runtime injects plus the locale seat. */
