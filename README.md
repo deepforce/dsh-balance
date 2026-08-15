@@ -20,10 +20,12 @@ it is never written into configuration, into the returned text, or into the brow
   **Session ≈ ¥…** spend figure (hover shows the token buckets × unit prices). The readout
   copy is bilingual and follows the active dsh language (Chinese / English). The browser
   fetches the host's `/dsh-balance` route; the API key never leaves the host.
-- **Daily-spend chart** — a `近{days}天 ≈ ¥…` toggle expands an inline SVG bar chart of the
-  last `usageDays` days' estimated spend (hover a bar for its date and amount). Data comes
-  from the host's `/dsh-usage` route, which folds `assistant/message` usage across persisted
-  sessions, pricing each request at the tier in effect at its own time.
+- **Daily-spend chart** — hovering `Last {days}d ≈ ¥…` floats a comic speech bubble upward
+  from the summary: a titled SVG bar chart of the last `usageDays` days' estimated spend,
+  with a Y axis of ¥ ticks, an X-axis date per bar, and per-bar hover details (date, amount,
+  request count, tokens). Moving away closes it. Data comes from the host's `/dsh-usage`
+  route, which folds `assistant/message` usage across persisted sessions, pricing each
+  request at the tier in effect at its own time.
 
 ## Session-cost estimate
 
