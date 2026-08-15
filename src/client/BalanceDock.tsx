@@ -8,7 +8,7 @@
  * language. The API key never leaves the host.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { UseProjection } from '@deepseek-ai/dsh-client-runtime/client'
@@ -117,6 +117,7 @@ const ROOT_STYLE: CSSProperties = {
   gap: 4,
   fontSize: 12,
   color: 'var(--dsw-text-secondary, #8a8f98)',
+  position: 'relative',
 }
 
 const ROW_STYLE: CSSProperties = {
@@ -152,6 +153,26 @@ const CHART_WRAP_STYLE: CSSProperties = {
   padding: '4px 8px',
   background: 'var(--dsw-surface-secondary, rgba(0,0,0,0.03))',
   borderRadius: 6,
+}
+
+/** The chart floats UP from the summary like a comic speech bubble. */
+const CHART_POPOVER_STYLE: CSSProperties = {
+  position: 'absolute',
+  bottom: '100%',
+  left: 0,
+  marginBottom: 8,
+  zIndex: 30,
+}
+
+/** The tail triangle pointing back at the summary. */
+const TAIL_STYLE: CSSProperties = {
+  position: 'absolute',
+  bottom: -6,
+  width: 0,
+  height: 0,
+  borderLeft: '6px solid transparent',
+  borderRight: '6px solid transparent',
+  borderTop: '7px solid var(--dsw-surface-secondary, rgba(0,0,0,0.03))',
 }
 
 /** Props: the projection hook the runtime injects plus the locale seat. */
@@ -214,8 +235,13 @@ export function BalanceDock({ useProjection, t }: BalanceDockProps) {
   // Hover-to-reveal: entering the summary opens the chart (loading it on
   // first use); leaving the whole dock closes it. Moving between the summary
   // and the chart stays inside ROOT, so the chart does not flicker.
+  const summaryRef = useRef<HTMLSpanElement | null>(null)
+  const [tailX, setTailX] = useState(24)
   const openChart = useCallback(() => {
     setUsageOpen(true)
+    // Point the bubble tail at the summary's horizontal center.
+    const el = summaryRef.current
+    if (el !== null) setTailX(el.offsetLeft + el.offsetWidth / 2)
     if (state.kind === 'ok' && (chart.kind === 'idle' || chart.kind === 'error')) {
       loadChart(state.data.usageDays)
     }
@@ -265,6 +291,7 @@ export function BalanceDock({ useProjection, t }: BalanceDockProps) {
               </Tooltip>
             )}
             <span
+              ref={summaryRef}
               onMouseEnter={openChart}
               title={t('usage.title')}
               style={USAGE_SUMMARY_STYLE}
@@ -278,12 +305,15 @@ export function BalanceDock({ useProjection, t }: BalanceDockProps) {
         )}
       </div>
       {usageOpen && (
-        <div style={CHART_WRAP_STYLE}>
-          {chart.kind === 'loading' && <span>{t('usage.loading')}</span>}
-          {chart.kind === 'error' && <Tooltip label={chart.message} side="top" delayMs={400}><span>{t('usage.error')}</span></Tooltip>}
-          {chart.kind === 'ok' && (chart.days.length === 0
-            ? <span>{t('usage.empty', { days: state.kind === 'ok' ? state.data.usageDays : '' })}</span>
-            : <UsageBars days={chart.days} t={t} />)}
+        <div style={CHART_POPOVER_STYLE}>
+          <div style={CHART_WRAP_STYLE}>
+            {chart.kind === 'loading' && <span>{t('usage.loading')}</span>}
+            {chart.kind === 'error' && <Tooltip label={chart.message} side="top" delayMs={400}><span>{t('usage.error')}</span></Tooltip>}
+            {chart.kind === 'ok' && (chart.days.length === 0
+              ? <span>{t('usage.empty', { days: state.kind === 'ok' ? state.data.usageDays : '' })}</span>
+              : <UsageBars days={chart.days} t={t} />)}
+          </div>
+          <div style={{ ...TAIL_STYLE, left: tailX - 6 }} aria-hidden />
         </div>
       )}
     </div>
