@@ -292,13 +292,15 @@ export function BalanceDock({ useProjection, t }: BalanceDockProps) {
 
 /**
  * A tiny dependency-free SVG bar chart of per-day spend: Y axis with grid
- * ticks, an X-axis date label per bar, and a hover tooltip per bar.
+ * ticks, an X-axis date label per bar, and a comic-style speech bubble that
+ * floats up from each bar on hover.
  */
 function UsageBars({ days, t }: { days: DailyUsage[]; t: TranslateNS<'balance'> }) {
   const [hovered, setHovered] = useState<number | null>(null)
-  const margin = { top: 18, right: 8, bottom: 18, left: 40 }
+  // Top margin reserves room for the speech bubble above the tallest bar.
+  const margin = { top: 40, right: 8, bottom: 18, left: 40 }
   const width = 320
-  const height = 92
+  const height = 110
   const plotW = width - margin.left - margin.right
   const plotH = height - margin.top - margin.bottom
   const max = Math.max(...days.map((day) => day.cost), 0.01)
@@ -339,7 +341,7 @@ function UsageBars({ days, t }: { days: DailyUsage[]; t: TranslateNS<'balance'> 
             <text x={x + barW / 2} y={height - 5} textAnchor="middle" fontSize={8} fill="currentColor">
               {day.date.slice(5)}
             </text>
-            {active && <BarTooltip day={day} barX={x + barW / 2} width={width} t={t} />}
+            {active && <SpeechBubble day={day} barX={x + barW / 2} barTop={y} width={width} t={t} />}
           </g>
         )
       })}
@@ -347,30 +349,38 @@ function UsageBars({ days, t }: { days: DailyUsage[]; t: TranslateNS<'balance'> 
   )
 }
 
-/** The hover card pinned to the top of the chart, describing one bar. */
-function BarTooltip({
+/** A comic-style speech bubble floating above a bar, with a tail pointing at it. */
+function SpeechBubble({
   day,
   barX,
+  barTop,
   width,
   t,
 }: {
   day: DailyUsage
   barX: number
+  barTop: number
   width: number
   t: TranslateNS<'balance'>
 }) {
   const tipW = 118
-  const tipH = 32
+  const tipH = 34
+  const tailH = 4
   const x = Math.min(Math.max(barX - tipW / 2, 0), width - tipW)
-  const y = 2
+  const y = Math.max(1, barTop - tipH - tailH)
+  const fill = 'var(--dsw-surface, #1f2430)'
   return (
     <g>
-      <rect x={x} y={y} width={tipW} height={tipH} rx={4}
-        fill="var(--dsw-surface, #1f2430)" stroke="rgba(128,128,128,0.45)" />
+      {/* Tail triangle pointing at the bar top. */}
+      <polygon
+        points={`${barX - 5},${y + tipH} ${barX + 5},${y + tipH} ${barX},${barTop}`}
+        fill={fill}
+      />
+      <rect x={x} y={y} width={tipW} height={tipH} rx={4} fill={fill} stroke="rgba(128,128,128,0.45)" />
       <text x={x + 6} y={y + 12} fontSize={9} fill="currentColor">
         {t('usage.bar', { date: day.date, cost: formatCny(day.cost) })}
       </text>
-      <text x={x + 6} y={y + 24} fontSize={9} fill="currentColor">
+      <text x={x + 6} y={y + 25} fontSize={9} fill="currentColor">
         {t('usage.barDetail', {
           requests: String(day.requests),
           input: formatTokens(day.uncachedInput + day.cacheRead + day.cacheWrite),
