@@ -9,7 +9,7 @@
  *
  * Reload probe: this line changes the compiled lib/ artifact so upgrading the
  * plugin can be observed end-to-end through dsh-plugin-reloader's hot reload
- * (second probe — automatic watcher verification).
+ * (third probe — automatic watcher, scope-dir watch).
  *
  * @module @deepforce/dsh-balance
  */
