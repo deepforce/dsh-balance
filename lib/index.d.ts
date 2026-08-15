@@ -7,6 +7,9 @@
  * environment) and calls DeepSeek's `GET /user/balance`. The key never appears
  * in configuration or in the text returned to the UI.
  *
+ * Reload probe: this line changes the compiled lib/ artifact so upgrading the
+ * plugin can be observed end-to-end through dsh-plugin-reloader's hot reload.
+ *
  * @module @deepforce/dsh-balance
  */
 import type { Context } from '@deepseek-ai/cordis';
