@@ -149,13 +149,20 @@ const LINK_STYLE: CSSProperties = {
   textUnderlineOffset: 2,
 }
 
-/** Opaque bubble surface: hides the chat content underneath. */
+/** Opaque, theme-following surface: hides the chat behind without a hard black. */
 const CHART_WRAP_STYLE: CSSProperties = {
   padding: '4px 8px',
-  background: 'var(--dsw-surface, #1f2430)',
-  border: '1px solid rgba(128,128,128,0.35)',
+  background: 'var(--dsw-alias-bg-layer-1, #f5f6f7)',
+  border: '1px solid rgba(128,128,128,0.25)',
   borderRadius: 6,
-  boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
+  boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+}
+
+/** The bubble's heading row above the chart. */
+const CHART_TITLE_STYLE: CSSProperties = {
+  fontWeight: 600,
+  fontSize: 11,
+  paddingBottom: 4,
 }
 
 /** The chart floats UP from the summary like a comic speech bubble. */
@@ -175,8 +182,8 @@ const TAIL_STYLE: CSSProperties = {
   height: 0,
   borderLeft: '6px solid transparent',
   borderRight: '6px solid transparent',
-  borderTop: '8px solid var(--dsw-surface, #1f2430)',
-  filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.25))',
+  borderTop: '8px solid var(--dsw-alias-bg-layer-1, #f5f6f7)',
+  filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.18))',
 }
 
 /** Props: the projection hook the runtime injects plus the locale seat. */
@@ -311,6 +318,7 @@ export function BalanceDock({ useProjection, t }: BalanceDockProps) {
       {usageOpen && (
         <div style={CHART_POPOVER_STYLE}>
           <div style={CHART_WRAP_STYLE}>
+            <div style={CHART_TITLE_STYLE}>{t('usage.title')}</div>
             {chart.kind === 'loading' && <span>{t('usage.loading')}</span>}
             {chart.kind === 'error' && <Tooltip label={chart.message} side="top" delayMs={400}><span>{t('usage.error')}</span></Tooltip>}
             {chart.kind === 'ok' && (chart.days.length === 0
