@@ -1,9 +1,9 @@
 /**
  * Composer-dock entry rendering the DeepSeek account balance, the current
- * session's estimated spend, and a click-to-expand daily-spend bar chart.
- * Balance and price tier arrive from the host's `/dsh-balance` route; the
- * session token usage rides the standard `tokenUsage` projection (the same one
- * the stats line's cache-hit figure uses); the chart fetches `/dsh-usage`.
+ * session's estimated spend, and a hover-revealed daily-spend bar chart with
+ * axes. Balance and price tier arrive from the host's `/dsh-balance` route;
+ * the session token usage rides the standard `tokenUsage` projection (the same
+ * one the stats line's cache-hit figure uses); the chart fetches `/dsh-usage`.
  * Copy comes from the `balance` locale namespace, so it follows the active dsh
  * language. The API key never leaves the host.
  */
@@ -14,5 +14,5 @@ export interface BalanceDockProps {
     useProjection: UseProjection;
     t: TranslateNS<'balance'>;
 }
-/** The stats-line companion: balance readout, top-up link, session spend, and the daily chart. */
+/** The stats-line companion: balance readout, top-up link, session spend, and the hover chart. */
 export declare function BalanceDock({ useProjection, t }: BalanceDockProps): import("react").JSX.Element;

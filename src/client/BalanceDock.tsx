@@ -1,9 +1,9 @@
 /**
  * Composer-dock entry rendering the DeepSeek account balance, the current
- * session's estimated spend, and a click-to-expand daily-spend bar chart.
- * Balance and price tier arrive from the host's `/dsh-balance` route; the
- * session token usage rides the standard `tokenUsage` projection (the same one
- * the stats line's cache-hit figure uses); the chart fetches `/dsh-usage`.
+ * session's estimated spend, and a hover-revealed daily-spend bar chart with
+ * axes. Balance and price tier arrive from the host's `/dsh-balance` route;
+ * the session token usage rides the standard `tokenUsage` projection (the same
+ * one the stats line's cache-hit figure uses); the chart fetches `/dsh-usage`.
  * Copy comes from the `balance` locale namespace, so it follows the active dsh
  * language. The API key never leaves the host.
  */
@@ -90,6 +90,21 @@ function formatCny(value: number): string {
   return `¥${value.toFixed(2)}`
 }
 
+/** Compact axis tick: ¥0 / ¥1.5 / ¥27. */
+function formatAxisTick(value: number): string {
+  if (value === 0) return '¥0'
+  if (value >= 100) return `¥${Math.round(value)}`
+  if (value >= 10) return `¥${Math.round(value * 10) / 10}`
+  return `¥${Math.round(value * 100) / 100}`
+}
+
+/** Compact token count: 517 / 12.3K / 1.2M. */
+function formatTokens(value: number): string {
+  if (value < 1_000) return String(value)
+  if (value < 1_000_000) return `${Math.round(value / 100) / 10}K`
+  return `${Math.round(value / 100_000) / 10}M`
+}
+
 /** Per-token price from the per-million figures. */
 function perToken(perMillion: number): number {
   return perMillion / 1_000_000
@@ -121,11 +136,10 @@ const BUTTON_STYLE: CSSProperties = {
   opacity: 0.7,
 }
 
-const USAGE_BUTTON_STYLE: CSSProperties = {
-  ...BUTTON_STYLE,
-  opacity: 1,
+const USAGE_SUMMARY_STYLE: CSSProperties = {
   textDecoration: 'underline',
   textUnderlineOffset: 2,
+  whiteSpace: 'nowrap',
 }
 
 const LINK_STYLE: CSSProperties = {
@@ -146,7 +160,7 @@ export interface BalanceDockProps {
   t: TranslateNS<'balance'>
 }
 
-/** The stats-line companion: balance readout, top-up link, session spend, and the daily chart. */
+/** The stats-line companion: balance readout, top-up link, session spend, and the hover chart. */
 export function BalanceDock({ useProjection, t }: BalanceDockProps) {
   const usage = useProjection('tokenUsage')
   const [state, setState] = useState<DockState>({ kind: 'loading' })
@@ -197,15 +211,17 @@ export function BalanceDock({ useProjection, t }: BalanceDockProps) {
       })
   }, [])
 
-  const toggleChart = useCallback(() => {
-    setUsageOpen((open) => {
-      const next = !open
-      if (next && state.kind === 'ok' && (chart.kind === 'idle' || chart.kind === 'error')) {
-        loadChart(state.data.usageDays)
-      }
-      return next
-    })
+  // Hover-to-reveal: entering the summary opens the chart (loading it on
+  // first use); leaving the whole dock closes it. Moving between the summary
+  // and the chart stays inside ROOT, so the chart does not flicker.
+  const openChart = useCallback(() => {
+    setUsageOpen(true)
+    if (state.kind === 'ok' && (chart.kind === 'idle' || chart.kind === 'error')) {
+      loadChart(state.data.usageDays)
+    }
   }, [state, chart.kind, loadChart])
+
+  const closeChart = useCallback(() => setUsageOpen(false), [])
 
   // Estimated session spend: the token buckets priced at the host-selected
   // tier. Cache-write tokens are unpriced by DeepSeek's published table, so
@@ -236,7 +252,7 @@ export function BalanceDock({ useProjection, t }: BalanceDockProps) {
       )
 
   return (
-    <div style={ROOT_STYLE}>
+    <div style={ROOT_STYLE} onMouseLeave={closeChart}>
       <div style={ROW_STYLE}>
         {balanceText}
         {state.kind === 'ok' && (
@@ -248,18 +264,16 @@ export function BalanceDock({ useProjection, t }: BalanceDockProps) {
                 <span>{t('cost.label', { cost: formatCny(cost) })}</span>
               </Tooltip>
             )}
-            <button
-              type="button"
-              onClick={toggleChart}
+            <span
+              onMouseEnter={openChart}
               title={t('usage.title')}
-              aria-expanded={usageOpen}
-              style={USAGE_BUTTON_STYLE}
+              style={USAGE_SUMMARY_STYLE}
             >
               {usageOpen ? '▾ ' : '▸ '}{t('usage.summary', {
                 days: state.data.usageDays,
                 cost: chartTotal === null ? '…' : formatCny(chartTotal),
               })}
-            </button>
+            </span>
           </>
         )}
       </div>
@@ -276,33 +290,94 @@ export function BalanceDock({ useProjection, t }: BalanceDockProps) {
   )
 }
 
-/** A tiny dependency-free SVG bar chart of per-day spend. */
+/**
+ * A tiny dependency-free SVG bar chart of per-day spend: Y axis with grid
+ * ticks, an X-axis date label per bar, and a hover tooltip per bar.
+ */
 function UsageBars({ days, t }: { days: DailyUsage[]; t: TranslateNS<'balance'> }) {
-  const width = 300
-  const height = 60
-  const baseline = height - 8
+  const [hovered, setHovered] = useState<number | null>(null)
+  const margin = { top: 18, right: 8, bottom: 18, left: 40 }
+  const width = 320
+  const height = 92
+  const plotW = width - margin.left - margin.right
+  const plotH = height - margin.top - margin.bottom
   const max = Math.max(...days.map((day) => day.cost), 0.01)
-  const barW = Math.max(8, Math.min(26, width / days.length - 4))
+  const step = plotW / days.length
+  const barW = Math.max(7, Math.min(24, step * 0.62))
+  const ticks = [0, max / 2, max]
+  const baseline = margin.top + plotH
+
   return (
     <svg width={width} height={height} role="img" aria-label={t('usage.title')}>
-      {days.map((day, index) => {
-        const barH = Math.max(2, day.cost / max * (baseline - 4))
-        const x = index * (barW + 4)
+      {/* Y-axis grid lines and tick labels. */}
+      {ticks.map((tick) => {
+        const y = baseline - tick / max * plotH
         return (
-          <rect
-            key={day.date}
-            x={x}
-            y={baseline - barH}
-            width={barW}
-            height={barH}
-            rx={2}
-            fill="var(--dsw-accent, #4c8dff)"
-          >
-            <title>{t('usage.day', { date: day.date, cost: formatCny(day.cost) })}</title>
-          </rect>
+          <g key={tick}>
+            <line x1={margin.left} y1={y} x2={width - margin.right} y2={y} stroke="rgba(128,128,128,0.18)" strokeDasharray="3 3" />
+            <text x={margin.left - 5} y={y + 3} textAnchor="end" fontSize={9} fill="currentColor">{formatAxisTick(tick)}</text>
+          </g>
+        )
+      })}
+      {/* X-axis baseline. */}
+      <line x1={margin.left} y1={baseline} x2={width - margin.right} y2={baseline} stroke="rgba(128,128,128,0.3)" />
+      {days.map((day, index) => {
+        const barH = Math.max(2, day.cost / max * plotH)
+        const x = margin.left + index * step + (step - barW) / 2
+        const y = baseline - barH
+        const active = hovered === index
+        return (
+          <g key={day.date} onMouseEnter={() => setHovered(index)} onMouseLeave={() => setHovered(null)}>
+            <rect
+              x={x}
+              y={y}
+              width={barW}
+              height={barH}
+              rx={2}
+              fill={active ? 'var(--dsw-accent-strong, #7aa8ff)' : 'var(--dsw-accent, #4c8dff)'}
+            />
+            <text x={x + barW / 2} y={height - 5} textAnchor="middle" fontSize={8} fill="currentColor">
+              {day.date.slice(5)}
+            </text>
+            {active && <BarTooltip day={day} barX={x + barW / 2} width={width} t={t} />}
+          </g>
         )
       })}
     </svg>
+  )
+}
+
+/** The hover card pinned to the top of the chart, describing one bar. */
+function BarTooltip({
+  day,
+  barX,
+  width,
+  t,
+}: {
+  day: DailyUsage
+  barX: number
+  width: number
+  t: TranslateNS<'balance'>
+}) {
+  const tipW = 118
+  const tipH = 32
+  const x = Math.min(Math.max(barX - tipW / 2, 0), width - tipW)
+  const y = 2
+  return (
+    <g>
+      <rect x={x} y={y} width={tipW} height={tipH} rx={4}
+        fill="var(--dsw-surface, #1f2430)" stroke="rgba(128,128,128,0.45)" />
+      <text x={x + 6} y={y + 12} fontSize={9} fill="currentColor">
+        {t('usage.bar', { date: day.date, cost: formatCny(day.cost) })}
+      </text>
+      <text x={x + 6} y={y + 24} fontSize={9} fill="currentColor">
+        {t('usage.barDetail', {
+          requests: String(day.requests),
+          input: formatTokens(day.uncachedInput + day.cacheRead + day.cacheWrite),
+          output: formatTokens(day.output),
+        })}
+      </text>
+    </g>
   )
 }
 

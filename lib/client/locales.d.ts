@@ -23,7 +23,8 @@ export declare const zh: {
     readonly 'usage.loading': "加载中…";
     readonly 'usage.empty': "近 {days} 天无消耗";
     readonly 'usage.error': "消耗数据不可用";
-    readonly 'usage.day': "{date} · ¥{cost}";
+    readonly 'usage.bar': "{date} · ¥{cost}";
+    readonly 'usage.barDetail': "{requests} 次请求 · 输入 {input} · 输出 {output}";
 };
 /** English dictionary, key-identical to the Chinese source of truth. */
 export declare const en: Record<BalanceKey, string>;
