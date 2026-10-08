@@ -7,7 +7,7 @@
  * Copy comes from the `balance` locale namespace, so it follows the active dsh
  * language. The API key never leaves the host.
  */
-import type { UseProjection } from '@deepseek-ai/dsh-client-runtime/client';
+import type { UseProjection } from '@deepseek-ai/dsh-api-session-controller/client';
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots';
 /** Props: the projection hook the runtime injects plus the locale seat. */
 export interface BalanceDockProps {

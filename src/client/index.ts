@@ -6,7 +6,11 @@
  * @module @deepforce/dsh-balance/client
  */
 
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+// 0.2.x retired @deepseek-ai/dsh-client-runtime; ClientContext is the plain
+// cordis Context on the browser side, so alias it locally.
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+// Type-only: merges the ctx.slots declaration.
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: merges the ctx.locale declaration.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: merges the conversation slot declarations into the SlotMap.

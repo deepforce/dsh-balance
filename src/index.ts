@@ -189,11 +189,14 @@ async function queryDailyUsage(ctx: Context, config: Config, days: number): Prom
     throw new Error('session persistence is not configured; cannot read historical usage')
   }
   const cutoff = Date.now() - days * 86_400_000
-  const headers = await persistence.list()
+  const snapshots = await persistence.list()
   const perDay = new Map<string, DailyUsage>()
-  for (const header of headers) {
-    if (header.createdAt < cutoff) continue
-    const { events } = await persistence.inspect(header.id)
+  for (const snapshot of snapshots) {
+    if (snapshot.header.createdAt < cutoff) continue
+    // 0.2.x removed persistence.inspect(): open a handle per session and read
+    // its events. await using closes the handle on both paths.
+    const handle = await persistence.open(snapshot.header.id, 'read')
+    const { events } = await handle.read()
     for (const event of events) {
       if (event.type !== 'assistant/message' || event.data.usage === undefined) continue
       const usage = event.data.usage
@@ -216,6 +219,7 @@ async function queryDailyUsage(ctx: Context, config: Config, days: number): Prom
       ) / 1_000_000
       perDay.set(entry.date, entry)
     }
+    await handle.close()
   }
   return [...perDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
 }
