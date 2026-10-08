@@ -18,7 +18,7 @@
 
 ## 兼容性
 
-已在 DeepSeek Harness `0.1.0-rc.6`（web profile，Windows 11）上实测通过——`/balance` 命令与对话框底部余额条均于 2026-08-14 在线验证。npm 上的 `@deepseek-ai/dsh-*` 包处于 pre-release（无兼容性承诺）；若新版 dsh 改变了 `conversation.composer.dock` 槽位或 `webServer` 服务，请重新验证并提交 issue。
+已在 DeepSeek Harness `0.2.0-rc.2`（web profile，Windows 11）及更早的 `0.1.0-rc.x` 上实测通过——`/balance` 命令与对话框底部余额条于 2026-08-14 在 `0.1.0-rc.6` 上在线验证，`0.2.x` 移植在 `0.2.0-rc.2` 上完成。`0.2.0` 起要求 dsh `0.2.x`：dsh 移除了 `@deepseek-ai/dsh-client-runtime` 并删除了 `sessionPersistence.inspect()`，而 `0.1.0` 依赖这两者。npm 上的 `@deepseek-ai/dsh-*` 包处于 pre-release（无兼容性承诺）；若新版 dsh 改变了 `conversation.composer.dock` 槽位或 `webServer` 服务，请重新验证并提交 issue。
 
 ## 安装
 

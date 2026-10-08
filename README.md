@@ -38,11 +38,14 @@ selection), and cache-write tokens are unpriced. Prices can be adjusted through 
 
 ## Compatibility
 
-Tested against DeepSeek Harness `0.1.0-rc.6` (web profile, Windows 11) — the `/balance`
-command and the composer-dock readout were both verified live on 2026-08-14. The npm
-`@deepseek-ai/dsh-*` packages are pre-release (no compatibility promise); if a newer dsh
-version changes the `conversation.composer.dock` slot or the `webServer` service, re-run
-the check below and file an issue.
+Tested against DeepSeek Harness `0.2.0-rc.2` (web profile, Windows 11) and earlier `0.1.0-rc.x`
+builds — the `/balance` command and the composer-dock readout were verified live on 2026-08-14
+against `0.1.0-rc.6`, and the `0.2.x` port against `0.2.0-rc.2`. Version `0.2.0` requires dsh
+`0.2.x`: dsh retired `@deepseek-ai/dsh-client-runtime` and removed
+`sessionPersistence.inspect()`, both of which `0.1.0` used. The npm `@deepseek-ai/dsh-*` packages
+are pre-release (no compatibility promise); if a newer dsh version changes the
+`conversation.composer.dock` slot or the `webServer` service, re-run the check below and file an
+issue.
 
 ## Install
 

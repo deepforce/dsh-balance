@@ -1,7 +1,7 @@
 {
   "name": "@deepforce/dsh-balance",
   "description": "DeepSeek account balance: /balance command plus a composer-dock readout in the web GUI",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publishConfig": {
     "access": "public"
   },
